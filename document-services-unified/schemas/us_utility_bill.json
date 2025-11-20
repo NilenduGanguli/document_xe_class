@@ -1,0 +1,79 @@
+{
+  "document_type": "us_utility_bill",
+  "country": "US",
+  "version": 1,
+  "document_schema": {
+    "account_holder_name": {
+      "type": "string",
+      "description": "Name of the account holder",
+      "required": true,
+      "example": "Robert Johnson"
+    },
+    "service_address": {
+      "type": "string",
+      "description": "Service address",
+      "required": true,
+      "example": "456 Oak Avenue, Springfield, IL 62701"
+    },
+    "billing_address": {
+      "type": "string",
+      "description": "Billing address (if different from service address)",
+      "required": false,
+      "example": "456 Oak Avenue, Springfield, IL 62701"
+    },
+    "account_number": {
+      "type": "string",
+      "description": "Account number",
+      "required": true,
+      "example": "1234567890"
+    },
+    "utility_company": {
+      "type": "string",
+      "description": "Utility company name",
+      "required": true,
+      "example": "Springfield Electric Company"
+    },
+    "service_type": {
+      "type": "string",
+      "description": "Type of utility service",
+      "required": true,
+      "example": "Electricity"
+    },
+    "billing_period_start": {
+      "type": "date",
+      "description": "Start date of billing period",
+      "required": true,
+      "example": "2024-01-01"
+    },
+    "billing_period_end": {
+      "type": "date",
+      "description": "End date of billing period",
+      "required": true,
+      "example": "2024-01-31"
+    },
+    "due_date": {
+      "type": "date",
+      "description": "Payment due date",
+      "required": true,
+      "example": "2024-02-15"
+    },
+    "total_amount_due": {
+      "type": "string",
+      "description": "Total amount due",
+      "required": true,
+      "example": "$125.67"
+    },
+    "previous_balance": {
+      "type": "string",
+      "description": "Previous balance",
+      "required": false,
+      "example": "$0.00"
+    },
+    "current_charges": {
+      "type": "string",
+      "description": "Current charges",
+      "required": false,
+      "example": "$125.67"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "document_type": "us_drivers_license",
+  "country": "US",
+  "version": 1,
+  "document_schema": {
+    "full_name": {
+      "type": "string",
+      "description": "Full name as appears on license",
+      "required": true,
+      "example": "Jane Elizabeth Doe"
+    },
+    "license_number": {
+      "type": "string",
+      "description": "Driver's license number",
+      "required": true,
+      "example": "D123-456-789-012"
+    },
+    "date_of_birth": {
+      "type": "date",
+      "description": "Date of birth",
+      "required": true,
+      "example": "1985-03-22"
+    },
+    "address": {
+      "type": "string",
+      "description": "Address",
+      "required": true,
+      "example": "123 Main Street, Anytown, CA 90210"
+    },
+    "gender": {
+      "type": "string",
+      "description": "Gender",
+      "required": true,
+      "example": "F"
+    },
+    "height": {
+      "type": "string",
+      "description": "Height",
+      "required": false,
+      "example": "5'6\""
+    },
+    "weight": {
+      "type": "string",
+      "description": "Weight",
+      "required": false,
+      "example": "130 lbs"
+    },
+    "eye_color": {
+      "type": "string",
+      "description": "Eye color",
+      "required": false,
+      "example": "BRN"
+    },
+    "issue_date": {
+      "type": "date",
+      "description": "Date of issue",
+      "required": true,
+      "example": "2020-01-15"
+    },
+    "expiry_date": {
+      "type": "date",
+      "description": "Date of expiry",
+      "required": true,
+      "example": "2025-01-15"
+    },
+    "license_class": {
+      "type": "string",
+      "description": "License class",
+      "required": true,
+      "example": "C"
+    },
+    "restrictions": {
+      "type": "string",
+      "description": "License restrictions",
+      "required": false,
+      "example": "CORRECTIVE LENSES"
+    }
+  }
+}

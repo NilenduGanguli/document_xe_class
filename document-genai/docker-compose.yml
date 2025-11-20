@@ -1,0 +1,41 @@
+services:
+  document-services-unified:
+    build: .
+    image: document-services-unified:latest
+    container_name: document-services-unified
+    ports:
+      - "8080:8080"  # Landing Page (HTML)
+      - "8000:8000"  # Classification API
+      - "8001:8001"  # Extraction API
+      - "8502:8502"  # Classification UI (Streamlit)
+      - "8501:8501"  # Extraction UI (Streamlit)
+    volumes:
+      - sqlite_data:/app/data          # SQLite database file
+      - ./schemas:/app/schemas:ro      # Pre-existing schemas (read-only)
+    environment:
+      - PORT=8000
+      - FRONTEND_PORT=8501
+      - DATABASE_PATH=/app/data/document_services.db
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MIN_CLASSIFICATION_CONFIDENCE=${MIN_CLASSIFICATION_CONFIDENCE:-0.7}
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - document-services-network
+
+volumes:
+  sqlite_data:
+    driver: local
+
+networks:
+  document-services-network:
+    driver: bridge
