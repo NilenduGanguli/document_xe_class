@@ -151,7 +151,7 @@ async def root():
     }
 
 
-@app.post("/classify-pdf")
+@app.post("/vertex/classify-pdf")
 async def classify_pdf(file: UploadFile = File(...)) -> ClassificationResponse:
     """
     Classify a PDF document page by page

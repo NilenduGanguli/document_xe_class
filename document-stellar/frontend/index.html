@@ -158,6 +158,20 @@
         <div class="header">
             <h1>📄 Document Services</h1>
             <p>Unified platform for document classification and data extraction</p>
+            
+            <div style="margin-top: 20px; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; display: inline-block;">
+                <h3 style="font-size: 1.2rem; margin-bottom: 10px;">Select AI Backend:</h3>
+                <div style="display: flex; gap: 20px; justify-content: center;">
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="backend" value="vertex" checked onchange="updateLinks()"> 
+                        <span>Vertex AI (Gemini)</span>
+                    </label>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="backend" value="openai" onchange="updateLinks()"> 
+                        <span>OpenAI (GPT-4o)</span>
+                    </label>
+                </div>
+            </div>
         </div>
         
         <div class="services">
@@ -165,16 +179,31 @@
                 <div class="service-icon">🏷️</div>
                 <h2>PDF Classification</h2>
                 <p>Classify PDF documents page-by-page using AI. Get document types, confidence scores, and reasoning for each classification.</p>
-                <a href="http://localhost:8502" target="_blank">Open Classification UI →</a>
+                <a href="http://localhost:8502" target="_blank" id="classification-link">Open Classification UI →</a>
             </div>
             
             <div class="service-card">
                 <div class="service-icon">📊</div>
                 <h2>Document Extraction</h2>
                 <p>Extract structured data from documents using schema-based extraction. Manage schemas, approve modifications, and view extraction results.</p>
-                <a href="http://localhost:8501" target="_blank">Open Extraction UI →</a>
+                <a href="http://localhost:8501" target="_blank" id="extraction-link">Open Extraction UI →</a>
             </div>
         </div>
+
+    <script>
+        function updateLinks() {
+            const backend = document.querySelector('input[name="backend"]:checked').value;
+            const classificationLink = document.getElementById('classification-link');
+            const extractionLink = document.getElementById('extraction-link');
+            
+            // Update links with query parameter
+            classificationLink.href = `http://localhost:8502/?backend=${backend}`;
+            extractionLink.href = `http://localhost:8501/?backend=${backend}`;
+        }
+        
+        // Initialize links on load
+        document.addEventListener('DOMContentLoaded', updateLinks);
+    </script>
         
         <div class="features">
             <h3>✨ Platform Features</h3>

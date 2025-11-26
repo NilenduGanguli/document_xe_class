@@ -18,6 +18,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Get backend from query params
+query_params = st.query_params
+backend_type = query_params.get("backend", "vertex")
+if isinstance(backend_type, list):
+    backend_type = backend_type[0]
+
 # Custom CSS
 st.markdown("""
 <style>
@@ -122,8 +128,10 @@ def classify_pdf(file) -> Optional[Dict]:
         
         files = {"file": (file.name, file_content, "application/pdf")}
         
+        endpoint = "/vertex/classify-pdf" if backend_type == "vertex" else "/openai/classify-pdf"
+        
         response = requests.post(
-            f"{API_BASE_URL}/classify-pdf",
+            f"{API_BASE_URL}{endpoint}",
             files=files,
             timeout=300
         )
@@ -190,6 +198,33 @@ def main():
     
     # Sidebar navigation
     with st.sidebar:
+        st.header("Backend Configuration")
+        
+        # Allow changing backend in sidebar
+        backend_options = ["vertex", "openai"]
+        
+        # Handle case where backend_type might be invalid
+        if backend_type not in backend_options:
+            current_index = 0
+        else:
+            current_index = backend_options.index(backend_type)
+            
+        selected_backend = st.radio(
+            "Select AI Backend",
+            backend_options,
+            index=current_index,
+            format_func=lambda x: "Vertex AI (Gemini)" if x == "vertex" else "OpenAI (GPT-4o)"
+        )
+        
+        # Update query param if changed (requires rerun)
+        if selected_backend != backend_type:
+            st.query_params["backend"] = selected_backend
+            st.rerun()
+
+        st.info(f"Using: **{'Vertex AI' if selected_backend == 'vertex' else 'OpenAI'}**")
+        
+        st.markdown("---")
+
         st.header("API Status")
         if check_api_health():
             st.success(f"🟢 Connected to {API_BASE_URL}")

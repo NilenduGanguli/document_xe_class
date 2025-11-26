@@ -22,6 +22,12 @@ st.set_page_config(
 # API Configuration - Read from environment variable or use default
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8001")
 
+# Get backend from query params
+query_params = st.query_params
+backend_type = query_params.get("backend", "vertex")
+if isinstance(backend_type, list):
+    backend_type = backend_type[0]
+
 # Custom CSS for styling
 st.markdown("""
 <style>
@@ -209,8 +215,9 @@ def upload_document_for_schema(files: List) -> Optional[Dict]:
                 ("document", (uploaded_file.name, file_content, content_type))
             )
         
+        endpoint = "/vertex/extract" if backend_type == "vertex" else "/openai/extract"
         response = requests.post(
-            f"{API_BASE_URL}/extract",
+            f"{API_BASE_URL}{endpoint}",
             files=file_data,
             timeout=600  # Increased to 10 minutes for LLM processing
         )
@@ -256,8 +263,9 @@ def register_document_schema(files: List) -> Optional[Dict]:
                 ("document", (uploaded_file.name, file_content, content_type))
             )
         
+        endpoint = "/vertex/register-schema" if backend_type == "vertex" else "/openai/register-schema"
         response = requests.post(
-            f"{API_BASE_URL}/register-schema",
+            f"{API_BASE_URL}{endpoint}",
             files=file_data,
             timeout=600
         )
@@ -306,8 +314,9 @@ def extract_with_approved_schema(files: List) -> Optional[Dict]:
                 ("document", (uploaded_file.name, file_content, content_type))
             )
         
+        endpoint = "/vertex/extract-with-approved-schema" if backend_type == "vertex" else "/openai/extract-with-approved-schema"
         response = requests.post(
-            f"{API_BASE_URL}/extract-with-approved-schema",
+            f"{API_BASE_URL}{endpoint}",
             files=file_data,
             timeout=600
         )
@@ -1421,6 +1430,32 @@ def main():
     
     # Sidebar navigation
     st.sidebar.title("Navigation")
+    
+    # Backend Selection
+    st.sidebar.subheader("Backend Configuration")
+    backend_options = ["vertex", "openai"]
+    
+    # Handle case where backend_type might be invalid
+    if backend_type not in backend_options:
+        current_index = 0
+    else:
+        current_index = backend_options.index(backend_type)
+        
+    selected_backend = st.sidebar.radio(
+        "Select AI Backend",
+        backend_options,
+        index=current_index,
+        format_func=lambda x: "Vertex AI (Gemini)" if x == "vertex" else "OpenAI (GPT-4o)"
+    )
+    
+    # Update query param if changed
+    if selected_backend != backend_type:
+        st.query_params["backend"] = selected_backend
+        st.rerun()
+
+    st.sidebar.info(f"Using: **{'Vertex AI' if selected_backend == 'vertex' else 'OpenAI'}**")
+    st.sidebar.markdown("---")
+
     page = st.sidebar.radio(
         "Go to",
         ["📝 Register Schema", "📤 Upload Documents", "📚 View All Schemas", "✏️ Modify Schemas", "🔍 Extract & View"],

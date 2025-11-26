@@ -46,7 +46,7 @@ app = FastAPI(
 )
 
 
-@app.post("/extract")
+@app.post("/vertex/extract")
 async def extract_document(
     document: List[UploadFile] = File(...)
 ) -> JSONResponse:
@@ -519,7 +519,7 @@ async def delete_schema(schema_id: str) -> JSONResponse:
             status_code=500, detail=f"Failed to delete schema: {e}")
 
 
-@app.post("/register-schema")
+@app.post("/vertex/register-schema")
 async def register_schema(
     document: List[UploadFile] = File(...)
 ) -> JSONResponse:
@@ -716,7 +716,7 @@ async def register_schema(
             raise HTTPException(status_code=500, detail=f"Schema registration failed: {e}")
 
 
-@app.post("/extract-with-approved-schema")
+@app.post("/vertex/extract-with-approved-schema")
 async def extract_with_approved_schema(
     document: List[UploadFile] = File(...)
 ) -> JSONResponse:
