@@ -1,0 +1,61 @@
+{
+  "document_type": "us_passport",
+  "country": "US",
+  "version": 1,
+  "document_schema": {
+    "full_name": {
+      "type": "string",
+      "description": "Full name as appears on passport",
+      "required": true,
+      "example": "John Michael Smith"
+    },
+    "passport_number": {
+      "type": "string",
+      "description": "Passport number",
+      "required": true,
+      "example": "123456789"
+    },
+    "date_of_birth": {
+      "type": "date",
+      "description": "Date of birth",
+      "required": true,
+      "example": "1990-01-15"
+    },
+    "place_of_birth": {
+      "type": "string",
+      "description": "Place of birth",
+      "required": false,
+      "example": "New York, NY, USA"
+    },
+    "nationality": {
+      "type": "string",
+      "description": "Nationality",
+      "required": true,
+      "example": "United States of America"
+    },
+    "gender": {
+      "type": "string",
+      "description": "Gender",
+      "required": true,
+      "example": "M"
+    },
+    "issue_date": {
+      "type": "date",
+      "description": "Date of issue",
+      "required": true,
+      "example": "2020-05-10"
+    },
+    "expiry_date": {
+      "type": "date",
+      "description": "Date of expiry",
+      "required": true,
+      "example": "2030-05-09"
+    },
+    "issuing_authority": {
+      "type": "string",
+      "description": "Issuing authority",
+      "required": false,
+      "example": "United States Department of State"
+    }
+  }
+}

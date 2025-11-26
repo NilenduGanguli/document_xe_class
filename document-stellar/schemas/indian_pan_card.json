@@ -1,0 +1,43 @@
+{
+  "document_type": "indian_pan_card",
+  "country": "IN",
+  "version": 1,
+  "document_schema": {
+    "full_name": {
+      "type": "string",
+      "description": "Full name as appears on PAN card",
+      "required": true,
+      "example": "RAJESH KUMAR SHARMA"
+    },
+    "pan_number": {
+      "type": "string",
+      "description": "Permanent Account Number",
+      "required": true,
+      "example": "ABCDE1234F"
+    },
+    "date_of_birth": {
+      "type": "date",
+      "description": "Date of birth",
+      "required": true,
+      "example": "1980-12-15"
+    },
+    "fathers_name": {
+      "type": "string",
+      "description": "Father's name",
+      "required": true,
+      "example": "SURESH KUMAR SHARMA"
+    },
+    "signature": {
+      "type": "string",
+      "description": "Signature verification",
+      "required": false,
+      "example": "Signature Present"
+    },
+    "photograph": {
+      "type": "string",
+      "description": "Photograph verification",
+      "required": false,
+      "example": "Photograph Present"
+    }
+  }
+}

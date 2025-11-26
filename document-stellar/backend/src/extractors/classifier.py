@@ -1,0 +1,349 @@
+import base64
+from pathlib import Path
+from typing import Optional, List
+from google.genai import types
+import aiofiles
+import logging
+from difflib import SequenceMatcher
+from sqlalchemy import select
+import fitz  # PyMuPDF
+from ..db.models import DocumentTypeClassification, DocumentSchema
+from ..config.llm_config import get_llm
+from ..config.openai_config import get_openai_client
+from ..db.connection import db
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+def calculate_similarity(a: str, b: str) -> float:
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+async def get_existing_document_types(country: str) -> List[str]:
+    try:
+        async with db.async_session_factory() as session:
+            stmt = select(DocumentSchema).where(DocumentSchema.country == country)
+            result = await session.execute(stmt)
+            existing_schemas = result.scalars().all()
+            
+            document_types = list(set(schema.document_type for schema in existing_schemas))
+            return document_types
+    except Exception as e:
+        return []
+
+
+def find_best_matching_document_type(classified_type: str, existing_types: List[str], threshold: float = 0.8) -> Optional[str]:
+    if not existing_types:
+        return None
+    
+    best_match = None
+    best_score = 0.0
+    
+    classified_lower = classified_type.lower().strip()
+    
+    for existing_type in existing_types:
+        existing_lower = existing_type.lower().strip()
+        
+        if classified_lower == existing_lower:
+            return existing_type
+        
+        similarity = calculate_similarity(classified_lower, existing_lower)
+        
+        if (classified_lower in existing_lower or existing_lower in classified_lower):
+            similarity = max(similarity, 0.85)
+        
+        if similarity > best_score and similarity >= threshold:
+            best_score = similarity
+            best_match = existing_type
+    
+    return best_match
+
+
+async def classify_document_type(
+    document_paths: List[Path],
+    content_types: List[str],
+    max_retries: int = 3
+) -> Optional[DocumentTypeClassification]:
+    if not document_paths or len(document_paths) == 0:
+        return None
+
+    try:
+        contents = []
+        
+        for doc_path, content_type in zip(document_paths, content_types):
+            if not doc_path.exists():
+                continue
+                
+            async with aiofiles.open(doc_path, "rb") as doc_file:
+                document_data = await doc_file.read()
+
+            contents.append(types.Part.from_bytes(data=document_data, mime_type=content_type))
+
+        if not contents:
+            return None
+
+    except IOError as e:
+        logger.error(f"Error reading document for classification: {e}")
+        return None
+
+    # Add a text prompt to contents to ensure the model receives a user instruction
+    contents.append(types.Part.from_text(text="Please classify this document and identify the issuing country."))
+
+    classification_prompt = """
+    You MUST analyze these document(s) (images and/or PDFs) and classify the document type AND identify the issuing country.
+    
+    CLASSIFICATION REQUIREMENTS:
+    1. Identify the specific document type from the image
+    2. Identify the country that issued this document
+    3. Provide confidence score between 0.0 and 1.0
+    4. Examples of document type names (lowercase with underscores):
+       - aadhar_card (Indian Aadhar/Aadhaar card)
+       - pan_card (Indian PAN card)
+       - passport (Any country passport)
+       - driver_license (Driving license/permit)
+       - voter_id (Voter ID card)
+       - bank_statement (Bank account statement)
+       - utility_bill (Electricity/gas/water bill)
+       - income_certificate (Income certificate)
+       - birth_certificate (Birth certificate)
+       - marriage_certificate (Marriage certificate)
+       - property_deed (Property documents)
+       - insurance_policy (Insurance documents)
+       - medical_report (Medical reports/prescriptions)
+       - academic_certificate (Educational certificates)
+       - employment_letter (Employment/salary documents)
+    
+    5. CRITICAL: Only use the above specific document types. DO NOT use generic categories like "other_government_id", "other_financial", or "other_personal"
+    6. If the document doesn't match any of the above types, use the exact document name you see (e.g., if you see "Domicile Certificate", use "domicile_certificate")
+    7. Always prefer specific document names over generic categories
+    8. If you're unsure between multiple types, choose the most likely one
+    9. Provide alternative document types if confidence is below 0.8
+    
+    COUNTRY IDENTIFICATION:
+    - MUST use ISO 3166-1 alpha-2 codes ONLY (e.g., "IN" for India, "US" for United States, "GB" for United Kingdom)
+    - Country codes must be UPPERCASE and exactly 2 letters
+    - Look for country-specific text, logos, government seals, language, and formatting
+    - Common country indicators and their ISO codes:
+      * India (IN): Hindi/English text, Government of India seals, specific formats for Aadhar/PAN
+      * United States (US): English text, state seals, US government formatting
+      * United Kingdom (GB): English text, UK government symbols, specific formatting
+      * Canada (CA): English/French text, Canadian government symbols
+      * Australia (AU): English text, Australian government formatting
+      * Germany (DE): German text, EU symbols, German government formatting
+      * France (FR): French text, EU symbols, French government formatting
+    - If country cannot be determined with certainty, use "XX" (unknown country code)
+    
+    ACCURACY REQUIREMENTS:
+    - Examine text, layout, logos, and official formatting
+    - Consider language and regional specifics
+    - Look for specific identifying elements (document numbers, government seals, etc.)
+    - Be conservative with confidence scores - only use 0.9+ for very clear documents
+    - READ the document title/header carefully and use that as the document type name
+    """
+
+    client = get_llm()
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Sending classification request to LLM (Attempt {attempt + 1})")
+            response = await client.aio.models.generate_content(
+                model="gemini-2.0-flash-exp",
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=classification_prompt,
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                    response_schema=DocumentTypeClassification
+                )
+            )
+
+            parsed_response = response.parsed
+            if not parsed_response:
+                logger.warning("LLM returned empty parsed response for classification")
+                continue
+
+            if not parsed_response.document_type:
+                logger.warning("LLM returned response without document_type")
+                continue
+
+            existing_types = await get_existing_document_types(parsed_response.country)
+            
+            matched_type = find_best_matching_document_type(
+                parsed_response.document_type, 
+                existing_types,
+                threshold=0.8
+            )
+            
+            final_document_type = matched_type if matched_type else parsed_response.document_type
+            
+            final_response = DocumentTypeClassification(
+                document_type=final_document_type,
+                confidence=parsed_response.confidence,
+                country=parsed_response.country,
+                alternative_types=parsed_response.alternative_types
+            )
+            
+            return final_response
+
+        except Exception as e:
+            logger.error(f"Classification attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                continue
+
+    return None
+
+
+async def classify_document_type_openai(
+    document_paths: List[Path],
+    content_types: List[str],
+    max_retries: int = 3
+) -> Optional[DocumentTypeClassification]:
+    if not document_paths or len(document_paths) == 0:
+        return None
+
+    client = get_openai_client()
+    
+    classification_prompt = """
+    You MUST analyze these document(s) (images and/or PDFs) and classify the document type AND identify the issuing country.
+    
+    CLASSIFICATION REQUIREMENTS:
+    1. Identify the specific document type from the image
+    2. Identify the country that issued this document
+    3. Provide confidence score between 0.0 and 1.0
+    4. Examples of document type names (lowercase with underscores):
+       - aadhar_card (Indian Aadhar/Aadhaar card)
+       - pan_card (Indian PAN card)
+       - passport (Any country passport)
+       - driver_license (Driving license/permit)
+       - voter_id (Voter ID card)
+       - bank_statement (Bank account statement)
+       - utility_bill (Electricity/gas/water bill)
+       - income_certificate (Income certificate)
+       - birth_certificate (Birth certificate)
+       - marriage_certificate (Marriage certificate)
+       - property_deed (Property documents)
+       - insurance_policy (Insurance documents)
+       - medical_report (Medical reports/prescriptions)
+       - academic_certificate (Educational certificates)
+       - employment_letter (Employment/salary documents)
+    
+    5. CRITICAL: Only use the above specific document types. DO NOT use generic categories like "other_government_id", "other_financial", or "other_personal"
+    6. If the document doesn't match any of the above types, use the exact document name you see (e.g., if you see "Domicile Certificate", use "domicile_certificate")
+    7. Always prefer specific document names over generic categories
+    8. If you're unsure between multiple types, choose the most likely one
+    9. Provide alternative document types if confidence is below 0.8
+    
+    COUNTRY IDENTIFICATION:
+    - MUST use ISO 3166-1 alpha-2 codes ONLY (e.g., "IN" for India, "US" for United States, "GB" for United Kingdom)
+    - Country codes must be UPPERCASE and exactly 2 letters
+    - Look for country-specific text, logos, government seals, language, and formatting
+    - Common country indicators and their ISO codes:
+      * India (IN): Hindi/English text, Government of India seals, specific formats for Aadhar/PAN
+      * United States (US): English text, state seals, US government formatting
+      * United Kingdom (GB): English text, UK government symbols, specific formatting
+      * Canada (CA): English/French text, Canadian government symbols
+      * Australia (AU): English text, Australian government formatting
+      * Germany (DE): German text, EU symbols, German government formatting
+      * France (FR): French text, EU symbols, French government formatting
+    - If country cannot be determined with certainty, use "XX" (unknown country code)
+    
+    ACCURACY REQUIREMENTS:
+    - Examine text, layout, logos, and official formatting
+    - Consider language and regional specifics
+    - Look for specific identifying elements (document numbers, government seals, etc.)
+    - Be conservative with confidence scores - only use 0.9+ for very clear documents
+    - READ the document title/header carefully and use that as the document type name
+    """
+
+    user_content = []
+    user_content.append({"type": "text", "text": "Please classify this document and identify the issuing country."})
+
+    for doc_path, content_type in zip(document_paths, content_types):
+        if not doc_path.exists():
+            continue
+            
+        if content_type == "application/pdf":
+            try:
+                doc = fitz.open(doc_path)
+                for page in doc:
+                    pix = page.get_pixmap()
+                    img_data = pix.tobytes("png")
+                    base64_image = base64.b64encode(img_data).decode('utf-8')
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{base64_image}"
+                        }
+                    })
+                doc.close()
+            except Exception as e:
+                logger.error(f"Error converting PDF to image: {e}")
+                continue
+        elif content_type.startswith("image/"):
+            async with aiofiles.open(doc_path, "rb") as doc_file:
+                image_data = await doc_file.read()
+                base64_image = base64.b64encode(image_data).decode('utf-8')
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{content_type};base64,{base64_image}"
+                    }
+                })
+
+    if len(user_content) == 1: # Only text prompt
+        return None
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Sending classification request to OpenAI (Attempt {attempt + 1})")
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": classification_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "classification_response",
+                        "schema": DocumentTypeClassification.model_json_schema()
+                    }
+                },
+                temperature=0.0
+            )
+
+            content = response.choices[0].message.content
+            if not content:
+                logger.warning("OpenAI returned empty content")
+                continue
+            
+            import json
+            parsed_data = json.loads(content)
+            parsed_response = DocumentTypeClassification(**parsed_data)
+
+            existing_types = await get_existing_document_types(parsed_response.country)
+            
+            matched_type = find_best_matching_document_type(
+                parsed_response.document_type, 
+                existing_types,
+                threshold=0.8
+            )
+            
+            final_document_type = matched_type if matched_type else parsed_response.document_type
+            
+            final_response = DocumentTypeClassification(
+                document_type=final_document_type,
+                confidence=parsed_response.confidence,
+                country=parsed_response.country,
+                alternative_types=parsed_response.alternative_types
+            )
+            
+            return final_response
+
+        except Exception as e:
+            logger.error(f"Classification attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                continue
+
+    return None
